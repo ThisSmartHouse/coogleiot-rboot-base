@@ -1,6 +1,6 @@
 /*
   +----------------------------------------------------------------------+
-  | Coogle IOT Skeleton                                                  |
+  | Coogle IOT skeleton                                                  |
   +----------------------------------------------------------------------+
   | Copyright (c) 2017-2019 John Coggeshall                              |
   +----------------------------------------------------------------------+
@@ -24,12 +24,14 @@
 
 #include "buildinfo.h"
 #include "rboot.h"
+#include "ArduinoJson.h"
 #include <rboot-api.h>
 #include "CoogleIOT_Logger.h"
 #include "CoogleIOT_Wifi.h"
 #include "CoogleIOT_NTP.h"
 #include "CoogleIOT_MQTT.h"
 #include "CoogleIOT_OTA.h"
+#include "CoogleIOT_Config.h"
 #include "logger.h"
 #include <PubSubClient.h>
 
@@ -45,24 +47,32 @@
 #define APP_NAME "Skeleton"
 #endif
 
+#ifndef APP_MAX_STATE_LEN
+#define APP_MAX_STATE_LEN 16
+#endif
+
+#ifndef MQTT_TOPIC_MAX_LEN
+#define MQTT_TOPIC_MAX_LEN 64
+#endif
+
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
 
-#define STRINGIZE(x) #x
-#define STRINGIZE_VALUE_OF(x) STRINGIZE(x)
-
-struct app_config {
-	char ssid[33];
-	char pass[64];
-	char ota_endpoint[256];
-	char ota_token[256];
+typedef struct app_config_t {
+	coogleiot_config_base_t base;
+	char set_topic[MQTT_TOPIC_MAX_LEN + 1];
+	char state_topic[MQTT_TOPIC_MAX_LEN + 1];
 };
+
+app_config_t *app_config = NULL;
 
 class CoogleIOT_Logger;
 class CoogleIOT_Wifi;
 class CoogleIOT_NTP;
 class CoogleIOT_MQTT;
 class CoogleIOT_OTA;
+class CoogleIOT_Config;
 
+CoogleIOT_Config *configManager = NULL;
 CoogleIOT_Logger *_ciot_log = NULL;
 CoogleIOT_Wifi *WiFiManager = NULL;
 CoogleIOT_NTP *NTPManager = NULL;
@@ -71,18 +81,21 @@ CoogleIOT_OTA *otaManager = NULL;
 
 PubSubClient *mqtt = NULL;
 
+bool onParseConfig(DynamicJsonDocument&);
+
 void onMQTTConnect();
 void onMQTTCommand(const char *, byte *, unsigned int);
-void publishCurrentState();
 void logSetupInfo();
 
 void onNTPReady();
 void onNewFirmware();
 
+void setupConfig();
 void setupSerial();
 void setupMQTT();
 void setupNTP();
 void setupLogging();
+void setupLeds();
 void setupWiFi();
 void setupOTA();
 

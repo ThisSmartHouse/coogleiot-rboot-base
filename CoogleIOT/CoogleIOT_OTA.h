@@ -29,6 +29,7 @@
 #include "CoogleIOT_Logger.h"
 #include "CoogleIOT_Wifi.h"
 #include "CoogleIOT_NTP.h"
+#include "CoogleIOT_Config.h"
 #include "CoogleIOT_Utils.h"
 #include "SPIFFSCertStoreFile.h"
 #include "ArduinoJson.h"
@@ -40,6 +41,10 @@
 
 #ifndef COOGLEIOT_OTA_CHECK_FOR_UPGRADE_DELAY
 #define COOGLEIOT_OTA_CHECK_FOR_UPGRADE_DELAY 900000
+#endif
+
+#ifndef COOGLEIOT_OTA_VERIFICATION_WAIT_TIME
+#define COOGLEIOT_OTA_VERIFICATION_WAIT_TIME 20000
 #endif
 
 #ifndef COOGLEIOT_OTA_MAX_MANIFEST_PATH_LEN
@@ -61,6 +66,7 @@
 class CoogleIOT_Logger;
 class CoogleIOT_Wifi;
 class CoogleIOT_NTP;
+class CoogleIOT_Config;
 
 class CoogleIOT_OTA
 {
@@ -74,8 +80,10 @@ class CoogleIOT_OTA
 		CoogleIOT_OTA& setLogger(CoogleIOT_Logger *);
 		CoogleIOT_OTA& setWifiManager(CoogleIOT_Wifi *);
 		CoogleIOT_OTA& setNTPManager(CoogleIOT_NTP *);
+		CoogleIOT_OTA& setConfigManager(CoogleIOT_Config *);
 		CoogleIOT_OTA& setCurrentVersion(const char *);
 		CoogleIOT_OTA& setOTAManifestEndpoint(const char *);
+		CoogleIOT_OTA& verifyOTAComplete();
 
 		CoogleIOT_OTA& setOTACompleteCallback(void (*)());
 
@@ -107,10 +115,12 @@ class CoogleIOT_OTA
 		void (* completeCallback)() = NULL;
 
 		os_timer_t ota_check_timer;
+		os_timer_t new_rom_test_timer;
 
 		CoogleIOT_Logger *logger = NULL;
 		CoogleIOT_NTP *ntp = NULL;
 		CoogleIOT_Wifi *wifiManager = NULL;
+		CoogleIOT_Config *configManager = NULL;
 
 		HTTPClient *client = NULL;
 		BearSSL::WiFiClientSecure *sslClient = NULL;

@@ -27,6 +27,46 @@ extern "C" void __coogleiot_ota_check_callback(void *self)
 	obj->updateTimerTick = true;
 }
 
+extern "C" void __coogleiot_new_rom_test_callback(void *self)
+{
+	CoogleIOT_OTA *obj = static_cast<CoogleIOT_OTA *>(self);
+	obj->verifyOTAComplete();
+}
+
+CoogleIOT_OTA& CoogleIOT_OTA::verifyOTAComplete()
+{
+	uint8_t last_boot_mode;
+	uint8_t newRom;
+
+	if(!rboot_get_last_boot_mode(&last_boot_mode)) {
+		if(logger)
+			logger->error("[OTA] Failed to get last boot mode");
+		return *this;
+	}
+
+	if(last_boot_mode != MODE_TEMP_ROM) {
+		if(logger)
+			logger->error("[OTA] Cannot call verifyOTAComplete() if not booted into temporary ROM");
+		return *this;
+	}
+
+	if(logger)
+		logger->info("[OTA] Firmware lives! Setting temporary firmware as real firmware");
+
+	newRom = boot_config.current_rom == 0 ? 1 : 0;
+
+	if(!rboot_set_current_rom(newRom)) {
+		if(logger)
+			logger->logPrintf(ERROR, "[OTA] Failed to set new current rom to %d", newRom);
+		return *this;
+	}
+
+	if(logger)
+		logger->logPrintf(INFO, "[OTA] Verification complete! New ROM for device is slot %d", newRom);
+
+	return *this;
+}
+
 CoogleIOT_OTA& CoogleIOT_OTA::setOTAManifestEndpoint(const char *end)
 {
 	size_t endpoint_len = strlen(end) > COOGLEIOT_MAX_MANIFEST_LEN ?
@@ -221,8 +261,6 @@ void CoogleIOT_OTA::upgrade(const char *url)
 	firmware_remaining = client->getSize();
 	firmware_size = firmware_remaining;
 
-	boot_config = rboot_get_config();
-
 	upgrade_target = (boot_config.current_rom == 0) ? 1 : 0;
 
 	upgrade_write_status = rboot_write_init(boot_config.roms[upgrade_target]);
@@ -342,9 +380,13 @@ CoogleIOT_OTA::~CoogleIOT_OTA()
 
 void CoogleIOT_OTA::initialize()
 {
+	uint8_t last_boot_mode;
+	coogleiot_config_base_t *config;
+
 	if(logger)
 		logger->info("[OTA] Initializing Over-The-Air Firmware Updates");
 
+	os_timer_setfn(&new_rom_test_timer, __coogleiot_new_rom_test_callback, this);
 	os_timer_setfn(&ota_check_timer, __coogleiot_ota_check_callback, this);
 	os_timer_arm(&ota_check_timer, COOGLEIOT_OTA_CHECK_FOR_UPGRADE_DELAY, true);
 
@@ -368,9 +410,42 @@ void CoogleIOT_OTA::initialize()
 
 	system_upgrade_flag_set(COOGLEIOT_UPGRADE_IDLE);
 
-#ifdef COOGLEIOT_OTA_CHECK_FOR_UPGRADE_ON_INIT
-	updateTimerTick = true;
-#endif
+	boot_config = rboot_get_config();
+
+	if(!rboot_get_last_boot_mode(&last_boot_mode)) {
+		if(logger)
+			logger->error("[OTA] Failed to get last boot mode from rBoot!");
+
+		last_boot_mode = MODE_STANDARD;
+	}
+
+	if(last_boot_mode == MODE_TEMP_ROM) {
+		if(logger)
+			logger->logPrintf(INFO, "[OTA] Setting timer for %d milliseconds to make sure we don't crash before verifying new firmware...", COOGLEIOT_OTA_VERIFICATION_WAIT_TIME);
+		os_timer_arm(&new_rom_test_timer, COOGLEIOT_OTA_VERIFICATION_WAIT_TIME, false);
+	}
+
+	if(configManager) {
+		if(configManager->loaded) {
+			config = configManager->getConfig();
+
+			if(config->ota_check_on_boot) {
+				if(last_boot_mode == MODE_TEMP_ROM) {
+					if(logger)
+						logger->info("[OTA] Skipping OTA on initialize request, currently booted in temporary ROM");
+				} else {
+					updateTimerTick = true;
+				}
+			}
+
+			if(strlen(config->ota_endpoint) > 0) {
+				setOTAManifestEndpoint(config->ota_endpoint);
+
+				if(logger)
+					logger->logPrintf(INFO, "[OTA] Upgrade Manifest URL set to %s", config->ota_endpoint);
+			}
+		}
+	}
 }
 
 void CoogleIOT_OTA::loop()
@@ -440,6 +515,12 @@ CoogleIOT_OTA& CoogleIOT_OTA::setNTPManager(CoogleIOT_NTP *_ntp)
 CoogleIOT_OTA& CoogleIOT_OTA::setWifiManager(CoogleIOT_Wifi *wifi)
 {
 	wifiManager = wifi;
+	return *this;
+}
+
+CoogleIOT_OTA& CoogleIOT_OTA::setConfigManager(CoogleIOT_Config *c)
+{
+	configManager = c;
 	return *this;
 }
 

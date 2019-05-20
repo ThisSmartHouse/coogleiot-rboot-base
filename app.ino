@@ -1,6 +1,6 @@
 /*
   +----------------------------------------------------------------------+
-  | Coogle IOT Skeleton                                                  |
+  | Coogle IOT skeleton                                                  |
   +----------------------------------------------------------------------+
   | Copyright (c) 2017-2019 John Coggeshall                              |
   +----------------------------------------------------------------------+
@@ -29,11 +29,10 @@
 #include <ESP8266HTTPClient.h>
 #include <Hash.h>
 #include <PubSubClient.h>
-#include "ArduinoJson.h"
-#include <stdint.h>
 #include "app.h"
 
 bool ota_ready = false;
+bool restart = false;
 
 void onMQTTCommand(const char *topic, byte *payload, unsigned int length)
 {
@@ -42,8 +41,17 @@ void onMQTTCommand(const char *topic, byte *payload, unsigned int length)
 
 void onMQTTConnect()
 {
-	LOG_PRINTF(DEBUG, "Subscribed to %s", STRINGIZE_VALUE_OF(SET_TOPIC));
-	mqtt->subscribe(STRINGIZE_VALUE_OF(SET_TOPIC));
+	app_config_t *config;
+
+	if(configManager) {
+		if(configManager->loaded) {
+			config = (app_config_t *)configManager->getConfig();
+
+			mqtt->subscribe(config->set_topic);
+			LOG_PRINTF(INFO, "Subscribed to %s", config->set_topic);
+
+		}
+	}
 }
 
 void setupSerial()
@@ -66,8 +74,7 @@ void setupMQTT()
 {
 	mqttManager = new CoogleIOT_MQTT;
 	mqttManager->setLogger(_ciot_log);
-	mqttManager->setHostname(STRINGIZE_VALUE_OF(MQTT_SERVER));
-	mqttManager->setPort(MQTT_PORT);
+	mqttManager->setConfigManager(configManager);
 	mqttManager->setWifiManager(WiFiManager);
 	mqttManager->initialize();
 	mqttManager->setConnectCallback(onMQTTConnect);
@@ -79,18 +86,11 @@ void setupMQTT()
 
 void onNewFirmware()
 {
-	uint8_t newRom;
-
 	LOG_INFO("New Firmware available");
 	LOG_INFO("Current Firmware Details");
 	LOG_PRINTF(INFO, APP_NAME " v%s (%s) (built: %s %s)\r\n", _BuildInfo.src_version, _BuildInfo.env_version, _BuildInfo.date, _BuildInfo.time);
 
-	newRom = (rboot_get_current_rom() == 0) ? 1 : 0;
-
-	LOG_PRINTF(INFO, "Switching to ROM #%d", newRom);
-
-	rboot_set_current_rom(newRom);
-	system_restart();
+	restart = true;
 }
 
 void onNTPReady()
@@ -117,12 +117,50 @@ void setupLogging()
 
 }
 
+bool onParseConfig(DynamicJsonDocument& doc) {
+	JsonObject app;
+
+	if(!doc["app"].is<JsonObject>()) {
+		LOG_ERROR("No application configuration found");
+		return false;
+	}
+
+	app = doc["app"].as<JsonObject>();
+
+	if(app["mqtt_set_topic"].is<const char *>()) {
+
+		strlcpy(app_config->set_topic, app["mqtt_set_topic"] | "", sizeof(app_config->state_topic));
+
+		LOG_PRINTF(INFO, "Set Topic: %s", app_config->set_topic);
+	}
+
+	if(app["mqtt_state_topic"].is<const char *>()) {
+		strlcpy(app_config->state_topic, app["mqtt_state_topic"] | "", sizeof(app_config->state_topic));
+
+		LOG_PRINTF(INFO, "State Topic: %s", app_config->state_topic);
+	}
+
+	LOG_INFO("Application Configuration Loaded");
+
+	return true;
+}
+
+void setupConfig()
+{
+	app_config = (app_config_t *)os_zalloc(sizeof(app_config_t));
+
+	configManager = new CoogleIOT_Config;
+	configManager->setLogger(_ciot_log);
+	configManager->setConfigStruct((coogleiot_config_base_t *)app_config);
+	configManager->setParseCallback(onParseConfig);
+	configManager->initialize();
+}
+
 void setupWiFi()
 {
     WiFiManager = new CoogleIOT_Wifi;
     WiFiManager->setLogger(_ciot_log);
-    WiFiManager->setRemoteAPName(STRINGIZE_VALUE_OF(APP_SSID));
-    WiFiManager->setRemoteAPPassword(STRINGIZE_VALUE_OF(APP_PASS));
+    WiFiManager->setConfigManager(configManager);
 
     WiFiManager->initialize();
 }
@@ -134,7 +172,7 @@ void setupOTA()
 	otaManager->setWifiManager(WiFiManager);
 	otaManager->setNTPManager(NTPManager);
 	otaManager->setCurrentVersion(_BuildInfo.src_version);
-	otaManager->setOTAManifestEndpoint("https://192.168.1.50:4443/ota-manifest.json");
+	otaManager->setConfigManager(configManager);
 	otaManager->setOTACompleteCallback(onNewFirmware);
 	otaManager->initialize();
 }
@@ -159,6 +197,7 @@ void setup()
     randomSeed(micros());
 
     setupLogging();
+    setupConfig();
 
 	logSetupInfo();
 
@@ -168,10 +207,18 @@ void setup()
 
     // Give the logger an NTP Manager so it can record timestamps with logs
     _ciot_log->setNTPManager(NTPManager);
+
 }
 
 void loop()
 {
+	app_config_t *config;
+
+	if(restart) {
+		ESP.restart();
+		return;
+	}
+
 	WiFiManager->loop();
 	NTPManager->loop();
 	mqttManager->loop();

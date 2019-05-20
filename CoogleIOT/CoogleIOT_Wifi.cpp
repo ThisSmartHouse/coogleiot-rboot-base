@@ -21,6 +21,12 @@
 */
 #include "CoogleIOT_Wifi.h"
 
+CoogleIOT_Wifi& CoogleIOT_Wifi::setConfigManager(CoogleIOT_Config *c)
+{
+	configManager = c;
+	return *this;
+}
+
 CoogleIOT_Wifi& CoogleIOT_Wifi::setLogger(CoogleIOT_Logger *_logger)
 {
 	logger = _logger;
@@ -225,8 +231,18 @@ void CoogleIOT_Wifi::loop()
 
 bool CoogleIOT_Wifi::initialize()
 {
+	coogleiot_config_base_t *config;
+
 	if(logger)
 		logger->info("Initializing WiFiManager");
+
+	if(configManager) {
+		if(configManager->loaded) {
+			config = configManager->getConfig();
+			setRemoteAPName(config->wifi_ssid);
+			setRemoteAPPassword(config->wifi_pass);
+		}
+	}
 
 	if(strlen(hostname) <= 0) {
 		char tmp[17];

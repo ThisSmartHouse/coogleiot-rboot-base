@@ -1,3 +1,9 @@
-build/*
 config.mk
+.DS_Store
+build/
+data/config.json
 dump.txt
+rboot-api.c
+rboot-api.h
+rboot-bigflash.c
+rboot.h

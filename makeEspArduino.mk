@@ -250,14 +250,13 @@ FW_SECTS      = .text .data .rodata
 FW_USER_ARGS  = -quiet -bin -boot2 -iromchksum
 ELF_FILE = $(BUILD_DIR)/$(MAIN_NAME).elf
 OBJCOPY = $(TOOLS_ROOT)/xtensa-lx106-elf/bin/xtensa-lx106-elf-objcopy
-LIBMAIN_DST = $(BUILD_DIR)/libmain3.a
+LIBMAIN_DST = $(BUILD_DIR)/libmain2.a
 LIBMAIN_SRC = $(SDK_ROOT)/lib/libmain.a
 
-LINKER_LIBS = main3 hal phy pp net80211 lwip2-536-feat wpa crypto wps bearssl axtls espnow smartconfig airkiss wpa2 stdc++ m c gcc
+LINKER_LIBS = main2 hal phy pp net80211 lwip2-536-feat wpa crypto wps bearssl axtls espnow smartconfig airkiss wpa2 stdc++ m c gcc
 LINKER_LIBS := $(addprefix -l, $(LINKER_LIBS))
 
-LINKER_CMD = $(TOOLS_ROOT)/xtensa-lx106-elf/bin/xtensa-lx106-elf-gcc -fno-exceptions -Wl,--gc-sections -Wl,-Map -Wl,$(BUILD_DIR)/$(MAIN_NAME).map -g -w -Os -nostdlib -Wl,--no-check-sections -u app_entry -u Cache_Read_Enable_New -u _printf_float -u _scanf_float -Wl,-static -L$(BUILD_DIR) -L$(SDK_ROOT)/lib -L$(SDK_ROOT)/ld -L$(SDK_ROOT)/libc/xtensa-lx106-elf/lib -T$(MAIN_NAME).ld -Wl,--gc-sections -Wl,-wrap,system_restart_local -Wl,-wrap,spi_flash_read -o $(ELF_FILE) -Wl,--start-group $(LINKER_LIBS) $(BUILD_DIR)/arduino.ar $(sort $(filter-out $(BUILD_DIR)/rboot-bigflash.c.o, $(USER_OBJ))) $(BUILD_DIR)/buildinfo.c++.o  -Wl,--end-group
-#LINKER_CMD = $(TOOLS_ROOT)/xtensa-lx106-elf/bin/xtensa-lx106-elf-gcc -fno-exceptions -Wl,-Map -Wl,$(BUILD_DIR)/$(MAIN_NAME).map -g -w -Os -nostdlib -Wl,--no-check-sections -u app_entry -u _printf_float -u _scanf_float -Wl,-static -L$(BUILD_DIR) -L$(SDK_ROOT)/lib -L$(SDK_ROOT)/ld -L$(SDK_ROOT)/libc/xtensa-lx106-elf/lib -T$(MAIN_NAME).ld -Wl,--gc-sections -Wl,-wrap,system_restart_local -Wl,-wrap,spi_flash_read -o $(ELF_FILE) -Wl,--start-group $(BUILD_DIR)/arduino.ar $(LINKER_LIBS) $(sort $(USER_OBJ)) $(BUILD_DIR)/buildinfo.c++.o $(BUILD_DIR)/arduino.ar  -Wl,--end-group
+LINKER_CMD = $(TOOLS_ROOT)/xtensa-lx106-elf/bin/xtensa-lx106-elf-gcc -fno-exceptions -Wl,--gc-sections -Wl,-Map -Wl,$(BUILD_DIR)/$(MAIN_NAME).map -g -w -Os -nostdlib -Wl,--no-check-sections -u app_entry -u Cache_Read_Enable_New -u _printf_float -u _scanf_float -Wl,-static -L$(BUILD_DIR) -L$(SDK_ROOT)/lib -L$(SDK_ROOT)/ld -L$(SDK_ROOT)/libc/xtensa-lx106-elf/lib -T$(MAIN_NAME).ld -Wl,--gc-sections -Wl,-wrap,system_restart_local -Wl,-wrap,spi_flash_read -o $(ELF_FILE) -Wl,--start-group $(LINKER_LIBS) $(BUILD_DIR)/arduino.ar $(sort $(USER_OBJ)) $(BUILD_DIR)/buildinfo.c++.o  -Wl,--end-group
 ESPTOOL_PY ?= /usr/local/bin/esptool.py
 
 $(BUILD_INFO_H): | $(BUILD_DIR)
@@ -276,6 +275,10 @@ $(BUILD_DIR)/%.pde$(OBJ_EXT): %.pde $(BUILD_INFO_H) $(ARDUINO_MK)
 	echo  "CC $(<F)"
 	$(CPP_COM) $(CPP_EXTRA) -x c++ -include $(CORE_DIR)/Arduino.h $< -o $@
 
+$(BUILD_DIR)/rboot-bigflash.c$(OBJ_EXT): rboot-bigflash.c $(ARUDINO_MK)
+	echo "CC $(<F)"
+	$(C_COM) $(C_EXTRA) -DIRAM_ATTR="__attribute__((__section__(\".iram.text\")))" $< -o $@
+	
 $(BUILD_DIR)/%.c$(OBJ_EXT): %.c $(ARDUINO_MK)
 	echo  "CC $(<F)"
 	$(C_COM) $(C_EXTRA) $< -o $@
@@ -303,9 +306,9 @@ $(ELF_FILE): $(CORE_LIB) $(USER_LIBS) $(USER_OBJ)
 	$(LINKER_CMD) $(LD_EXTRA)
 	$(GEN_PART_COM)
 	
-$(LIBMAIN_DST): $(LIBMAIN_SRC) $(USER_OBJ)
+$(LIBMAIN_DST): $(LIBMAIN_SRC)
 	@echo "OC $(notdir $@)"
-	./gen-libmain3.sh $(realpath $(ESP_ROOT)) $(realpath $(BUILD_DIR))
+	$(OBJCOPY) -W Cache_Read_Enable_New $^ $@
 
 $(MAIN_EXE): $(LIBMAIN_DST) $(ELF_FILE)
 	echo Building $(MAIN_EXE)
