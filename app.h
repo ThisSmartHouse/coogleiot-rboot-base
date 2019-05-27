@@ -1,6 +1,6 @@
 /*
   +----------------------------------------------------------------------+
-  | Coogle IOT skeleton                                                  |
+  | CoogleIOT Skeleton                                                   |
   +----------------------------------------------------------------------+
   | Copyright (c) 2017-2019 John Coggeshall                              |
   +----------------------------------------------------------------------+
@@ -33,6 +33,7 @@
 #include "CoogleIOT_OTA.h"
 #include "CoogleIOT_Config.h"
 #include "logger.h"
+#include "led_patterns.h"
 #include <PubSubClient.h>
 
 #ifndef SERIAL_BAUD
@@ -45,10 +46,6 @@
 
 #ifndef APP_NAME
 #define APP_NAME "Skeleton"
-#endif
-
-#ifndef APP_MAX_STATE_LEN
-#define APP_MAX_STATE_LEN 16
 #endif
 
 #ifndef MQTT_TOPIC_MAX_LEN

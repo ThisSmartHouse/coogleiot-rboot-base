@@ -18,7 +18,7 @@
 		}
 	},
 	"app" : {
-		"mqtt_set_topic" : "/test-light/set",
-		"mqtt_state_topic" : "/test-light"
+		"mqtt_set_topic" : "/test/set",
+		"mqtt_state_topic" : "/test",
 	}
 }
